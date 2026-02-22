@@ -11,7 +11,7 @@ Power management, fan control, and thermal tuning for the ThinkPad P14s Gen 5 AM
 | GPU | AMD Radeon 780M (integrated) |
 | RAM | 32 GB LPDDR5x |
 | Storage | 1 TB SK Hynix NVMe (HFS001TEJ9X162N) |
-| Fans | Dual fans via ThinkPad ACPI (`/proc/acpi/ibm/fan`) |
+| Fan | Single fan via ThinkPad ACPI (`/proc/acpi/ibm/fan`) |
 
 ## Software
 
