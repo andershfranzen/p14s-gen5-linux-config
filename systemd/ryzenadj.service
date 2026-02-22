@@ -1,10 +1,10 @@
 [Unit]
-Description=Apply power limits and battery thresholds
+Description=Apply power profile and battery thresholds
 After=multi-user.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/ryzenadj --stapm-limit=25000 --slow-limit=28000 --fast-limit=35000 --tctl-temp=85
+ExecStart=/usr/local/bin/power-switch.sh
 ExecStart=/bin/bash -c 'echo 80 > /sys/class/power_supply/BAT0/charge_control_end_threshold && echo 75 > /sys/class/power_supply/BAT0/charge_control_start_threshold'
 
 [Install]

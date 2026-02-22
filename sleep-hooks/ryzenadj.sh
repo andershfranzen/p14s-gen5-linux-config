@@ -7,18 +7,11 @@ case "$1" in
         # Small delay to let hardware and EC settle after wake
         sleep 2
 
-        # RyzenAdj power limits (SMU resets these during sleep)
-        /usr/local/bin/ryzenadj \
-            --stapm-limit=25000 \
-            --slow-limit=28000 \
-            --fast-limit=35000 \
-            --tctl-temp=85
+        # Apply correct AC/battery profile (handles ryzenadj, EPP, boost, iGPU, tuned)
+        /usr/local/bin/power-switch.sh
 
         # Battery charge thresholds (EC may reset on some firmware)
         echo 80 > /sys/class/power_supply/BAT0/charge_control_end_threshold
         echo 75 > /sys/class/power_supply/BAT0/charge_control_start_threshold
-
-        # Re-verify tuned profile
-        /usr/sbin/tuned-adm profile balanced
         ;;
 esac

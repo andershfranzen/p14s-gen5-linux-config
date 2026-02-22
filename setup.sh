@@ -3,7 +3,6 @@
 # Installs all dependencies, builds ryzenadj, deploys configs, and enables services.
 #
 # Usage: sudo ./setup.sh
-# Or:    chmod +x setup.sh && ./setup.sh
 
 set -euo pipefail
 
@@ -26,7 +25,7 @@ check_root() {
 # --- Step 1: Install packages ---
 install_packages() {
     info "Installing packages..."
-    dnf install -y thinkfan tuned tuned-ppd thermald \
+    dnf install -y thinkfan tuned tuned-ppd powertop \
         cmake gcc-c++ pciutils-devel git
     ok "Packages installed"
 }
@@ -72,14 +71,25 @@ install_thinkfan() {
     ok "Thinkfan config installed"
 }
 
-# --- Step 5: RyzenAdj systemd service (boot) ---
-install_ryzenadj_service() {
-    info "Installing ryzenadj systemd service..."
-    cp "$SCRIPT_DIR/systemd/ryzenadj.service" /etc/systemd/system/ryzenadj.service
-    ok "ryzenadj.service installed"
+# --- Step 5: Power-switch script + udev rule ---
+install_power_switch() {
+    info "Installing power-switch script and udev rule..."
+    cp "$SCRIPT_DIR/scripts/power-switch.sh" /usr/local/bin/power-switch.sh
+    chmod 755 /usr/local/bin/power-switch.sh
+    cp "$SCRIPT_DIR/udev/99-power-switch.rules" /etc/udev/rules.d/99-power-switch.rules
+    udevadm control --reload-rules
+    ok "AC/battery auto-switching installed"
 }
 
-# --- Step 6: Sleep hook (post-resume) ---
+# --- Step 6: Systemd services ---
+install_services() {
+    info "Installing systemd services..."
+    cp "$SCRIPT_DIR/systemd/ryzenadj.service" /etc/systemd/system/ryzenadj.service
+    cp "$SCRIPT_DIR/systemd/powertop-autotune.service" /etc/systemd/system/powertop-autotune.service
+    ok "Systemd services installed"
+}
+
+# --- Step 7: Sleep hook (post-resume) ---
 install_sleep_hook() {
     info "Installing sleep hook..."
     mkdir -p /etc/systemd/system-sleep
@@ -88,7 +98,16 @@ install_sleep_hook() {
     ok "Sleep hook installed"
 }
 
-# --- Step 7: Enable and start services ---
+# --- Step 8: zram + sysctl ---
+install_zram() {
+    info "Installing zram and sysctl config..."
+    cp "$SCRIPT_DIR/zram/zram-generator.conf" /etc/systemd/zram-generator.conf
+    cp "$SCRIPT_DIR/sysctl/99-zram.conf" /etc/sysctl.d/99-zram.conf
+    sysctl --load=/etc/sysctl.d/99-zram.conf
+    ok "zram (zstd) and sysctl tuning installed (zram takes effect on reboot)"
+}
+
+# --- Step 9: Enable and start services ---
 enable_services() {
     info "Enabling services..."
     systemctl daemon-reload
@@ -99,32 +118,40 @@ enable_services() {
     # Tuned
     systemctl enable --now tuned.service
     systemctl enable --now tuned-ppd.service
-    tuned-adm profile balanced
 
-    # RyzenAdj (oneshot on boot)
+    # Powertop auto-tune
+    systemctl enable --now powertop-autotune.service
+
+    # RyzenAdj + power profile (oneshot on boot)
     systemctl enable ryzenadj.service
     systemctl start ryzenadj.service
 
     ok "All services enabled"
 }
 
-# --- Step 8: Verify ---
+# --- Step 10: Verify ---
 verify() {
     echo ""
     info "=== Verification ==="
     echo "thinkfan:        $(systemctl is-active thinkfan.service)"
     echo "tuned:           $(systemctl is-active tuned.service)"
     echo "tuned-ppd:       $(systemctl is-active tuned-ppd.service)"
+    echo "powertop:        $(systemctl show -p ExecMainStatus powertop-autotune.service | cut -d= -f2) (0=success)"
     echo "tuned profile:   $(tuned-adm active 2>/dev/null | awk '{print $NF}')"
     echo "ryzenadj:        exit $(systemctl show -p ExecMainStatus ryzenadj.service | cut -d= -f2) (0=success)"
     echo "sleep hook:      $([ -x /etc/systemd/system-sleep/ryzenadj.sh ] && echo 'installed' || echo 'MISSING')"
+    echo "power-switch:    $([ -x /usr/local/bin/power-switch.sh ] && echo 'installed' || echo 'MISSING')"
+    echo "udev rule:       $([ -f /etc/udev/rules.d/99-power-switch.rules ] && echo 'installed' || echo 'MISSING')"
     echo "fan_control:     $(cat /sys/module/thinkpad_acpi/parameters/fan_control 2>/dev/null || echo 'N/A')"
     echo "amd_pstate:      $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_driver 2>/dev/null || echo 'N/A')"
     echo "epp:             $(cat /sys/devices/system/cpu/cpu0/cpufreq/energy_performance_preference 2>/dev/null || echo 'N/A')"
+    echo "iGPU DPM:        $(cat /sys/class/drm/card1/device/power_dpm_force_performance_level 2>/dev/null || echo 'N/A')"
     echo "bat start:       $(cat /sys/class/power_supply/BAT0/charge_control_start_threshold 2>/dev/null || echo 'N/A')"
     echo "bat stop:        $(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 'N/A')"
+    echo "zram algo:       $(cat /sys/block/zram0/comp_algorithm 2>/dev/null | tr -d '[]' | awk '{for(i=1;i<=NF;i++) if($i ~ /\[/) print $i}' || cat /etc/systemd/zram-generator.conf | grep compression)"
+    echo "swappiness:      $(cat /proc/sys/vm/swappiness)"
     echo ""
-    ok "Setup complete. Reboot recommended to ensure modprobe config takes effect."
+    ok "Setup complete. Reboot recommended for zram changes to take effect."
 }
 
 # --- Main ---
@@ -133,7 +160,9 @@ install_packages
 install_ryzenadj
 install_modprobe
 install_thinkfan
-install_ryzenadj_service
+install_power_switch
+install_services
 install_sleep_hook
+install_zram
 enable_services
 verify
