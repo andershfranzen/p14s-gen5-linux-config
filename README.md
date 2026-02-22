@@ -21,14 +21,12 @@ Power management, fan control, and thermal tuning for the ThinkPad P14s Gen 5 AM
 | Kernel | 6.18.x (`amd_pstate_epp` default) |
 | Fan control | thinkfan 2.0 |
 | System tuning | tuned + tuned-ppd |
-| Power limits | RyzenAdj (built from source) |
 | Misc power | powertop auto-tune |
 
 ## What This Does
 
 - **Fan control** via thinkfan with a custom fan curve tuned for the 8840HS — silent at idle, progressive ramp through load, full speed safety above 83C
-- **Power limits** via RyzenAdj — conservative on AC, aggressive power saving on battery
-- **AC/battery auto-switching** — udev rule triggers automatic profile switching on plug/unplug
+- **AC/battery auto-switching** — udev rule triggers automatic profile switching on plug/unplug (EPP, boost, iGPU DPM, tuned profile)
 - **Battery charge thresholds** — start 75%, stop 80% (extends long-term battery health)
 - **iGPU power management** — dynamic DPM on AC, low-power on battery
 - **zram optimization** — zstd compression with tuned swappiness for better memory utilization
@@ -44,28 +42,27 @@ sudo ./setup.sh
 ```
 
 The setup script will:
-1. Install packages (thinkfan, tuned, tuned-ppd, powertop, cmake, gcc-c++, etc.)
-2. Build and install RyzenAdj from source
-3. Configure `thinkpad_acpi` kernel module with `fan_control=1`
-4. Deploy thinkfan config, zram config, sysctl tuning
-5. Install power-switch script, udev rule, systemd services, and sleep hook
-6. Enable and start all services
-7. Print verification output
+1. Install packages (thinkfan, tuned, tuned-ppd, powertop)
+2. Configure `thinkpad_acpi` kernel module with `fan_control=1`
+3. Deploy thinkfan config, zram config, sysctl tuning
+4. Install power-switch script, udev rule, systemd services, and sleep hook
+5. Enable and start all services
+6. Print verification output
 
 ## File Layout
 
 ```
 ├── setup.sh                        # Full automated setup
-├── install.sh                      # Config-only installer (assumes deps already built)
+├── install.sh                      # Config-only installer (assumes deps installed)
 ├── scripts/
 │   └── power-switch.sh             # AC/battery profile switcher → /usr/local/bin/
 ├── udev/
 │   └── 99-power-switch.rules       # AC plug/unplug trigger → /etc/udev/rules.d/
 ├── systemd/
-│   ├── ryzenadj.service            # Boot: apply profile + battery thresholds → /etc/systemd/system/
+│   ├── power-switch.service        # Boot: apply profile + battery thresholds → /etc/systemd/system/
 │   └── powertop-autotune.service   # Boot: powertop --auto-tune → /etc/systemd/system/
 ├── sleep-hooks/
-│   └── ryzenadj.sh                 # Post-resume hook → /etc/systemd/system-sleep/
+│   └── power-switch.sh             # Post-resume hook → /etc/systemd/system-sleep/
 ├── thinkfan/
 │   └── thinkfan.yaml               # Fan curve → /etc/thinkfan.yaml
 ├── zram/
@@ -82,10 +79,6 @@ The setup script will:
 
 | Parameter | Value |
 |---|---|
-| STAPM | 25W |
-| Slow PPT | 28W |
-| Fast PPT | 35W |
-| Tctl temp | 85C |
 | EPP | balance_performance |
 | CPU boost | On |
 | iGPU DPM | auto |
@@ -95,10 +88,6 @@ The setup script will:
 
 | Parameter | Value |
 |---|---|
-| STAPM | 15W |
-| Slow PPT | 18W |
-| Fast PPT | 25W |
-| Tctl temp | 80C |
 | EPP | power |
 | CPU boost | Off |
 | iGPU DPM | low |
@@ -106,7 +95,7 @@ The setup script will:
 
 Switching is automatic via udev rule on AC plug/unplug, and reapplied after suspend resume.
 
-**Note:** Curve Optimizer (true undervolting) is locked by the Lenovo BIOS firmware on this model. Power limit tuning is the best available alternative.
+**Note:** Both Curve Optimizer and RyzenAdj power limits are locked by the Lenovo BIOS firmware on this model — the SMU accepts commands but silently ignores them. Kernel-level controls (EPP, boost, tuned) provide the actual AC/battery differentiation.
 
 ## Fan Curve
 
@@ -138,20 +127,20 @@ Hysteresis gaps between lower/upper limits prevent fan speed oscillation.
 | `thinkfan.service` | long-running | Fan control daemon |
 | `thinkfan-sleep.service` | oneshot | Signals thinkfan before sleep |
 | `thinkfan-wakeup.service` | oneshot | Reloads thinkfan after wake |
-| `ryzenadj.service` | oneshot (boot) | Applies power profile + battery thresholds |
+| `power-switch.service` | oneshot (boot) | Applies power profile + battery thresholds |
 | `powertop-autotune.service` | oneshot (boot) | Misc kernel power tunables |
 | `tuned.service` | long-running | Dynamic system tuning |
 | `tuned-ppd.service` | long-running | PPD API translation for desktop integration |
 
-Post-resume: `/etc/systemd/system-sleep/ryzenadj.sh` reapplies the correct AC/battery profile and battery thresholds.
+Post-resume: `/etc/systemd/system-sleep/power-switch.sh` reapplies the correct AC/battery profile and battery thresholds.
 
 ## Customization
 
-**Power limits:** Edit `scripts/power-switch.sh` (both AC and battery sections), redeploy with `install.sh`.
+**Power profiles:** Edit `scripts/power-switch.sh` (both AC and battery sections), redeploy with `install.sh`.
 
 **Fan curve:** Edit `thinkfan/thinkfan.yaml`, copy to `/etc/thinkfan.yaml`, then `sudo systemctl restart thinkfan`.
 
-**Battery thresholds:** Edit the threshold lines in `systemd/ryzenadj.service` and `sleep-hooks/ryzenadj.sh`.
+**Battery thresholds:** Edit the threshold lines in `systemd/power-switch.service` and `sleep-hooks/power-switch.sh`.
 
 **Tuned profile:** Change profile names in `scripts/power-switch.sh`. See `tuned-adm list` for options.
 

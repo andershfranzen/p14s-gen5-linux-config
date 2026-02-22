@@ -6,13 +6,6 @@ AC_ONLINE=$(cat /sys/class/power_supply/AC/online 2>/dev/null)
 
 if [ "$AC_ONLINE" = "1" ]; then
     # === AC POWER ===
-    # Keep current conservative limits — not pushed harder
-    /usr/local/bin/ryzenadj \
-        --stapm-limit=25000 \
-        --slow-limit=28000 \
-        --fast-limit=35000 \
-        --tctl-temp=85
-
     # Balanced EPP
     for cpu in /sys/devices/system/cpu/cpufreq/policy*/energy_performance_preference; do
         echo balance_performance > "$cpu" 2>/dev/null
@@ -31,13 +24,6 @@ if [ "$AC_ONLINE" = "1" ]; then
 
 else
     # === BATTERY ===
-    # Aggressive power saving
-    /usr/local/bin/ryzenadj \
-        --stapm-limit=15000 \
-        --slow-limit=18000 \
-        --fast-limit=25000 \
-        --tctl-temp=80
-
     # Power-saving EPP
     for cpu in /sys/devices/system/cpu/cpufreq/policy*/energy_performance_preference; do
         echo power > "$cpu" 2>/dev/null

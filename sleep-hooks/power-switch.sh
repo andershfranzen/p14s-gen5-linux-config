@@ -7,7 +7,7 @@ case "$1" in
         # Small delay to let hardware and EC settle after wake
         sleep 2
 
-        # Apply correct AC/battery profile (handles ryzenadj, EPP, boost, iGPU, tuned)
+        # Apply correct AC/battery profile (EPP, boost, iGPU, tuned)
         /usr/local/bin/power-switch.sh
 
         # Battery charge thresholds (EC may reset on some firmware)

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Config-only installer for ThinkPad P14s Gen 5 AMD power management
-# Assumes packages and ryzenadj are already installed. Use setup.sh for full setup.
+# Assumes packages are already installed. Use setup.sh for full setup.
 #
 # Usage: sudo ./install.sh
 
@@ -29,14 +29,14 @@ sudo udevadm control --reload-rules
 
 # Systemd services
 echo "Installing systemd services..."
-sudo cp "$SCRIPT_DIR/systemd/ryzenadj.service" /etc/systemd/system/ryzenadj.service
+sudo cp "$SCRIPT_DIR/systemd/power-switch.service" /etc/systemd/system/power-switch.service
 sudo cp "$SCRIPT_DIR/systemd/powertop-autotune.service" /etc/systemd/system/powertop-autotune.service
 
 # Sleep hook
 echo "Installing sleep hook..."
 sudo mkdir -p /etc/systemd/system-sleep
-sudo cp "$SCRIPT_DIR/sleep-hooks/ryzenadj.sh" /etc/systemd/system-sleep/ryzenadj.sh
-sudo chmod 755 /etc/systemd/system-sleep/ryzenadj.sh
+sudo cp "$SCRIPT_DIR/sleep-hooks/power-switch.sh" /etc/systemd/system-sleep/power-switch.sh
+sudo chmod 755 /etc/systemd/system-sleep/power-switch.sh
 
 # zram + sysctl
 echo "Installing zram and sysctl config..."
@@ -49,17 +49,16 @@ echo "Enabling services..."
 sudo systemctl daemon-reload
 sudo systemctl enable --now thinkfan.service
 sudo systemctl enable --now powertop-autotune.service
-sudo systemctl enable ryzenadj.service
-sudo systemctl start ryzenadj.service
+sudo systemctl enable power-switch.service
+sudo systemctl start power-switch.service
 
 echo ""
 echo "=== Verification ==="
 echo "thinkfan:      $(systemctl is-active thinkfan.service)"
-echo "ryzenadj:      exit $(systemctl show -p ExecMainStatus ryzenadj.service | cut -d= -f2) (0=success)"
+echo "power-switch:  exit $(systemctl show -p ExecMainStatus power-switch.service | cut -d= -f2) (0=success)"
 echo "powertop:      exit $(systemctl show -p ExecMainStatus powertop-autotune.service | cut -d= -f2) (0=success)"
 echo "tuned:         $(tuned-adm active)"
-echo "power-switch:  $([ -x /usr/local/bin/power-switch.sh ] && echo 'installed' || echo 'MISSING')"
-echo "sleep hook:    $([ -x /etc/systemd/system-sleep/ryzenadj.sh ] && echo 'installed' || echo 'MISSING')"
+echo "sleep hook:    $([ -x /etc/systemd/system-sleep/power-switch.sh ] && echo 'installed' || echo 'MISSING')"
 echo "bat start:     $(cat /sys/class/power_supply/BAT0/charge_control_start_threshold 2>/dev/null || echo 'N/A')"
 echo "bat stop:      $(cat /sys/class/power_supply/BAT0/charge_control_end_threshold 2>/dev/null || echo 'N/A')"
 echo "fan_control:   $(cat /sys/module/thinkpad_acpi/parameters/fan_control 2>/dev/null || echo 'N/A')"
